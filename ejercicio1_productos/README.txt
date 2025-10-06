@@ -144,4 +144,5 @@ monitoreo.log
 
 strace.log
 
+
 Recursos compartidos en /dev/shm y semáforos POSIX asociados
