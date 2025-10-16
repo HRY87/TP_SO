@@ -20,7 +20,7 @@
 #include <fcntl.h>
 
 //defines and constants
-#define DB_PATH "../productos.csv"
+#define DB_PATH "./db/productos.csv"
 #define MAXHOSTNAME 128
 #define PORT 13000
 #define CONN_LIMIT 5
@@ -35,7 +35,7 @@
 int establish(const char*, u_int16_t);
 void zombie_catcher(int);
 void database_transaction(int, int, int);
-void process_connection(int, int);
+void process_connection(int, int, int);
 
 sem_t connection_sem;
 sem_t db_sem;
@@ -142,37 +142,24 @@ void process_connection(int client_socket, int session_id, int db_fd) {
         if (n > 0) {
             buffer[n] = '\0';
             printf("Client %d: %s\n", session_id, buffer);
-            switch (buffer)
-            {
-            case "BEGIN TRANSACTION":
+            if (strcmp(buffer, "BEGIN TRANSACTION") == 0) {
+                // Wait for exclusive access to the database
                 sem_wait(&db_sem);
                 send(client_socket, "Transaction started. You have exclusive access to the database.\n", 64, 0);
                 database_transaction(client_socket, session_id, db_fd);
+                send(client_socket, "Transaction committed. You no longer have exclusive access to the database.\n", 70, 0);
                 sem_post(&db_sem);
-                send(client_socket, "Transaction committed. You have released access to the database.\n", 66, 0);
-                continue;
-            
-
-            case "exit":
+            } else if (strcmp(buffer, "exit") == 0) {
                 printf("Client %d disconnected.\n", session_id);
                 break;
-            
-            default:
+            } else {
                 send(client_socket, "Unknown command. Please use BEGIN TRANSACTION to use the database.\n", 68, 0);
                 continue;
             }
-            
         } else {
             printf("Client %d disconnected.\n", session_id);
             break;
-                
-            }
-            
         }
-
-        char response[BUFFER_SIZE + 19]; // 19 is the length of "Message received: "
-        snprintf(response, sizeof(response), "Message received: %s", buffer);
-        send(client_socket, response, strlen(response), 0);
     }
     close(client_socket);
 }
@@ -208,9 +195,9 @@ void main(int argc, char *argv[]) {
     sem_init(&connection_sem, 1, CONN_LIMIT);
     sem_init(&db_sem, 1, 1);
 
-    int database_fd = open(DB_PATH, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
+    int database_fd = open(DB_PATH, O_RDWR);
     if (database_fd < 0) {
-        perror("Couldn't open or create the database file!");
+        perror("Couldn't open the database file!");
         close(server_fd);
         close(database_fd);
         exit(EXIT_FAILURE);
