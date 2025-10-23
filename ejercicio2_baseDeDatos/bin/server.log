@@ -1,0 +1,8 @@
+[2025-10-16 20:32:27] Cliente conectado (socket=6). Clientes activos=1
+[2025-10-16 20:32:40] Recibido de socket=6: hoal
+[2025-10-16 20:32:46] Recibido de socket=6: mostrar
+[2025-10-16 20:32:51] Recibido de socket=6: buscar
+[2025-10-16 20:32:57] Recibido de socket=6: buscar hol
+[2025-10-16 20:33:03] Recibido de socket=6: salir
+[2025-10-16 20:33:03] Cliente socket=6 desconectado. Clientes activos=0
+[2025-10-16 20:33:07] 🛑 Señal 2 recibida. Cerrando servidor y liberando recursos...
