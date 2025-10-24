@@ -10,6 +10,8 @@
 #include <fcntl.h>
 #include <ctype.h>
 #include <termios.h>
+#include <errno.h>
+#include <pthread.h>
 
 #define BUFFER_SIZE 4096
 #define TIMEOUT_MS 300 // milisegundos sin datos = fin de respuesta
@@ -22,6 +24,8 @@ void mostrar_menu() {
     printf("  MODIFICAR <ID>;<ID,Descripcion,Cantidad,Fecha,Hora,Generador>\n");
     printf("  ELIMINAR <ID>\n");
     printf("  BEGIN / COMMIT / ROLLBACK\n");
+    printf("  FILTRO <campo>=<valor>\n");
+    printf("  AYUDA\n");
     printf("  SALIR\n\n");
 }
 
@@ -37,6 +41,23 @@ static void limpiar_entrada() {
     while ((c = getchar()) != '\n' && c != EOF);
 }
 
+void check_connection(void *arg) {
+    int connection_fd = *(int *)arg;
+    char temp_buffer[1];
+    while (1) {
+        int n = recv(connection_fd, temp_buffer, sizeof(temp_buffer), MSG_PEEK);
+        if (n <= 0) {
+            if (n < 0) {
+                perror("\nError receiving data.");
+            } else {
+                printf("\nServer closed the connection.\n");
+            }
+            close(connection_fd);
+            break;
+        }
+    }
+}
+
 int main(int argc, char *argv[]) {
     if (argc < 3) {
         fprintf(stderr, "Uso: %s <IP> <PUERTO>\n", argv[0]);
@@ -44,6 +65,7 @@ int main(int argc, char *argv[]) {
     }
     const char *ip = argv[1];
     int puerto = atoi(argv[2]);
+    pthread_t conn_thread;
 
     int sock = socket(AF_INET, SOCK_STREAM, 0);
     if (sock < 0) { perror("socket"); return 1; }
@@ -78,10 +100,14 @@ int main(int argc, char *argv[]) {
             fputs(buffer, stdout);
         }
     }
+    if (pthread_create(&conn_thread, NULL, (void *)check_connection, &sock) != 0) {
+        perror("Error creating connection thread");
+    }
 
     mostrar_menu();
 
     char buffer[BUFFER_SIZE];
+
 
     while (1) {
         printf("> ");
@@ -91,14 +117,20 @@ int main(int argc, char *argv[]) {
         quitar_salto(buffer);
         if (strlen(buffer) == 0) continue; // evita líneas vacías
 
-        // envío del comando
+        // preparar comando
         size_t len = strlen(buffer);
         buffer[len++] = '\n';
+        // si es AYUDA, mostrar menú
+        if (strcasecmp(buffer, "AYUDA\n") == 0) {
+            mostrar_menu();
+            continue;
+        }
+        // enviar comando
         if (send(sock, buffer, len, 0) < 0) {
             perror("send");
             break;
         }
-
+        
         if (strcasecmp(buffer, "SALIR\n") == 0) {
             printf("Desconectando...\n");
             break;

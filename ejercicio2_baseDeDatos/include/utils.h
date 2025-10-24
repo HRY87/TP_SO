@@ -2,13 +2,14 @@
 #define UTILS_H
 
 #include <stddef.h>
+#include <stdint.h>
 
-void init_logger(const char *path);
+void init_logger(const char *path, uint8_t foreground);
 void close_logger(void);
 void log_msg(const char *fmt, ...);
 void log_monitoring_snapshot(void);
 
-void init_action_logger(const char *path);
+void init_action_logger(const char *path, uint8_t foreground);
 void close_action_logger(void);
 void log_action(const char *fmt, ...);
 

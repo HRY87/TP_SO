@@ -7,10 +7,55 @@
 #include "utils.h"
 
 char ARCHIVO_DB[512] = "data/productos.csv";
+char TEMP_DB[512] = "data/temp.csv";
+
+int copiar_archivo(const char* destino, const char* origen);
+
+FILE *abrir_base_datos(const char *modo) {
+    FILE *file = NULL;
+    if (strcmp(modo, "r") == 0) {
+        // si existe temp.csv, leer de ahí (transacción activa)
+        if (access(TEMP_DB, F_OK) == 0) {
+            file = fopen(TEMP_DB, modo);
+        } else {
+            file = fopen(ARCHIVO_DB, modo);
+        }
+    } else {
+        if (access(TEMP_DB, F_OK) != 0) {
+            // crear temp.csv copiando db original
+            if (copiar_archivo(TEMP_DB, ARCHIVO_DB) != 0) {
+                perror("Error al crear archivo temporal");
+            }
+        }
+        // para modos de escritura, siempre usar temp.csv
+        file = fopen(TEMP_DB, modo);
+    }
+    
+    return file;
+}
+
+int copiar_archivo(const char *destino, const char *origen) {
+    FILE *src = fopen(origen, "r");
+    if (!src) return -1;
+    FILE *dst = fopen(destino, "w");
+    if (!dst) {
+        fclose(src);
+        return -1;
+    }
+    char buffer[4096];
+    size_t n;
+    while ((n = fread(buffer, 1, sizeof(buffer), src)) > 0) {
+        fwrite(buffer, 1, n, dst);
+    }
+    fclose(src);
+    fclose(dst);
+    return 0;
+}
 
 // Muestra todos los registros de la base de datos al socket
 void mostrar_registros(int socket_cliente) {
-    FILE *archivo = fopen(ARCHIVO_DB, "r");
+    FILE *archivo = abrir_base_datos("r");
+
     if (!archivo) {
         enviar(socket_cliente, "Error al abrir el archivo de base de datos.\n");
         return;
@@ -30,7 +75,7 @@ void buscar_registro(int socket_cliente, const char *query) {
     }
     // quitar posible espacio inicial
     while (*query == ' ') query++;
-    FILE *archivo = fopen(ARCHIVO_DB, "r");
+    FILE *archivo = abrir_base_datos("r");
     if (!archivo) {
         enviar(socket_cliente, "Error al abrir el archivo de base de datos.\n");
         return;
@@ -49,7 +94,7 @@ void buscar_registro(int socket_cliente, const char *query) {
 
 // Agrega un nuevo registro (línea completa ya formateada)
 void agregar_registro(const char *nuevo_registro) {
-    FILE *archivo = fopen(ARCHIVO_DB, "a+");
+    FILE *archivo = abrir_base_datos("a+");
     if (!archivo) {
         perror("Error al abrir el archivo de base de datos");
         return;
@@ -81,14 +126,12 @@ void modificar_registro(const char *arg) {
         return;
     }
     int id = atoi(id_str);
-    FILE *archivo = fopen(ARCHIVO_DB, "r");
-    FILE *temp = fopen("temp.csv", "w");
-    if (!archivo || !temp) {
-        perror("Error al abrir archivos para modificar");
-        if (archivo) fclose(archivo);
-        if (temp) fclose(temp);
+    FILE *archivo = abrir_base_datos("r+");
+    if (!archivo) {
+        perror("Error al abrir archivo de base de datos");
         return;
     }
+    
     char linea[1024];
     int encontrado = 0;
     while (fgets(linea, sizeof(linea), archivo)) {
@@ -98,17 +141,12 @@ void modificar_registro(const char *arg) {
         char *tok = strtok(linea_c, ",");
         int id_arch = atoi(tok);
         if (id_arch == id) {
-            fprintf(temp, "%s\n", nuevo);
+            fprintf(archivo, "%s\n", nuevo);
             encontrado = 1;
-        } else {
-            fputs(linea, temp);
         }
     }
     fclose(archivo);
-    fclose(temp);
     // reemplazo atómico
-    remove(ARCHIVO_DB);
-    rename("temp.csv", ARCHIVO_DB);
     if (encontrado) printf("Registro %d modificado.\n", id);
     else printf("Registro %d no encontrado para modificar.\n", id);
 }
@@ -117,12 +155,9 @@ void modificar_registro(const char *arg) {
 void eliminar_registro(const char *arg) {
     if (!arg) return;
     int id = atoi(arg);
-    FILE *archivo = fopen(ARCHIVO_DB, "r");
-    FILE *temp = fopen("temp.csv", "w");
-    if (!archivo || !temp) {
-        perror("Error al abrir archivos para eliminar");
-        if (archivo) fclose(archivo);
-        if (temp) fclose(temp);
+    FILE *archivo = abrir_base_datos("r+");
+    if (!archivo) {
+        perror("Error al abrir archivo de base de datos");
         return;
     }
     char linea[1024];
@@ -133,13 +168,13 @@ void eliminar_registro(const char *arg) {
         copia[sizeof(copia)-1] = '\0';
         char *tok = strtok(copia, ",");
         int id_arch = atoi(tok);
-        if (id_arch != id) fputs(linea, temp);
-        else encontrado = 1;
+        if (id_arch != id) {
+            fputs(linea, archivo);
+        } else {
+            encontrado = 1;
+        }
     }
     fclose(archivo);
-    fclose(temp);
-    remove(ARCHIVO_DB);
-    rename("temp.csv", ARCHIVO_DB);
     if (encontrado) printf("Registro %d eliminado.\n", id);
     else printf("Registro %d no encontrado para eliminar.\n", id);
 }
@@ -162,7 +197,7 @@ void filtrar_generador(int socket_cliente, const char *generador) {
         return;
     }
 
-    FILE *archivo = fopen(ARCHIVO_DB, "r");
+    FILE *archivo = abrir_base_datos("r");
     if (!archivo) {
         enviar(socket_cliente, "Error al abrir el archivo de base de datos.\n");
         return;
@@ -196,19 +231,30 @@ void filtrar_generador(int socket_cliente, const char *generador) {
     fclose(archivo);
 }
 
+int rollback_transaccion() {
+    // elimina temp.csv
+    if (access(TEMP_DB, F_OK) == 0) {
+        if (remove(TEMP_DB) != 0) {
+            log_msg("Error al eliminar archivo temporal en ROLLBACK: %d", errno);
+            return -1;
+        }
+    }
+    return 0;
+}
+
 // Aplica archivo temporal (temp.csv) sobre la base de datos (atómico)
 int commit_temp() {
     // intenta eliminar original y renombrar temp
-    if (access("temp.csv", F_OK) != 0) {
+    if (access(TEMP_DB, F_OK) != 0) {
         // no hay temp
         return -1;
     }
     if (remove(ARCHIVO_DB) != 0) {
         // intentar continuar aun si falla remove
-        // opcional: log_msg("warning: remove db failed: %d", errno);
+        log_msg("warning: remove db failed: %d", errno);
     }
-    if (rename("temp.csv", ARCHIVO_DB) != 0) {
-        perror("rename temp -> db falló");
+    if (rename(TEMP_DB, ARCHIVO_DB) != 0) {
+        log_msg("rename temp -> db falló");
         return -1;
     }
     return 0;

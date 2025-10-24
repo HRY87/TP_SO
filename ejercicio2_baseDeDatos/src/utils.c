@@ -14,9 +14,13 @@ static char log_path[512] = "server_debug.log";
 // Action logger (solo acciones cliente<->servidor)
 static FILE *action_fp = NULL;
 static char action_path[512] = "server.log";
+static uint8_t action_foreground = 0;
 
 // Inicializa logger debug (info detallada)
-void init_logger(const char *path) {
+void init_logger(const char *path, uint8_t foreground) {
+    if (foreground) {
+        action_foreground = 1;
+    }
     if (path && path[0] != '\0') {
         strncpy(log_path, path, sizeof(log_path)-1);
         log_path[sizeof(log_path)-1] = '\0';
@@ -38,7 +42,10 @@ void close_logger() {
 }
 
 // Inicializa logger de acciones (server.log)
-void init_action_logger(const char *path) {
+void init_action_logger(const char *path, uint8_t foreground) {
+    if (foreground) {
+        action_foreground = 1;
+    }
     if (path && path[0] != '\0') {
         strncpy(action_path, path, sizeof(action_path)-1);
         action_path[sizeof(action_path)-1] = '\0';
@@ -64,14 +71,22 @@ void log_msg(const char *fmt, ...) {
     if (!log_fp) return;
     time_t t = time(NULL);
     struct tm tm = *localtime(&t);
-    fprintf(log_fp, "[%04d-%02d-%02d %02d:%02d:%02d] ",
-            tm.tm_year+1900, tm.tm_mon+1, tm.tm_mday,
-            tm.tm_hour, tm.tm_min, tm.tm_sec);
+    char actual_time[26];
+    strftime(actual_time, sizeof(actual_time), "%Y-%m-%d %H:%M:%S", &tm);
+    fprintf(log_fp, "[%s] ", actual_time);
     va_list ap;
     va_start(ap, fmt);
     vfprintf(log_fp, fmt, ap);
     va_end(ap);
     fprintf(log_fp, "\n");
+
+    if (action_foreground) {
+        printf("[%s] ", actual_time);
+        va_start(ap, fmt);
+        vfprintf(stdout, fmt, ap);
+        va_end(ap);
+        printf("\n");
+    }
     fflush(log_fp);
 }
 
@@ -80,14 +95,24 @@ void log_action(const char *fmt, ...) {
     if (!action_fp) return;
     time_t t = time(NULL);
     struct tm tm = *localtime(&t);
-    fprintf(action_fp, "[%04d-%02d-%02d %02d:%02d:%02d] ",
-            tm.tm_year+1900, tm.tm_mon+1, tm.tm_mday,
-            tm.tm_hour, tm.tm_min, tm.tm_sec);
+    char actual_time[26];
+    strftime(actual_time, sizeof(actual_time), "%Y-%m-%d %H:%M:%S", &tm);
+    fprintf(action_fp, "[%s] ", actual_time);
+    
     va_list ap;
     va_start(ap, fmt);
     vfprintf(action_fp, fmt, ap);
     va_end(ap);
     fprintf(action_fp, "\n");
+    
+    if (action_foreground) {
+        printf("[%s] ", actual_time);
+        va_start(ap, fmt);
+        vprintf(fmt, ap);
+        va_end(ap);
+        printf("\n");
+    }
+    
     fflush(action_fp);
 }
 

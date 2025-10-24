@@ -8,6 +8,7 @@
 #include <stdatomic.h>
 #include <errno.h>
 #include <ctype.h>
+#include <stdint.h>
 
 #include "db.h"
 #include "transaction.h"
@@ -26,8 +27,10 @@ atomic_int clientes_activos = 0;
 
 int MAX_CLIENTES = 5;
 int BACKLOG = 10;
+uint8_t FOREGROUND = 0;
 char CSV_PATH[512] = "data/productos.csv";
 char LOG_PATH[512] = "server.log";
+
 
 // ====== Prototipos ======
 void *manejador_cliente(void *arg);
@@ -47,20 +50,22 @@ int main(int argc, char *argv[]) {
             argv[0], argv[0]);
         exit(EXIT_FAILURE);
     }
-
+     // Ejecutar en primer plano
+    
     const char *ip = argv[1];
     int puerto = atoi(argv[2]);
     if (argc >= 4) MAX_CLIENTES = atoi(argv[3]);
     if (argc >= 5) BACKLOG = atoi(argv[4]);
     if (argc >= 6) strncpy(CSV_PATH, argv[5], sizeof(CSV_PATH) - 1);
     if (argc >= 7) strncpy(LOG_PATH, argv[6], sizeof(LOG_PATH) - 1);
-
+    if (argc >= 8) FOREGROUND = atoi(argv[7]);
+    
     if (MAX_CLIENTES <= 0) MAX_CLIENTES = 5;
     if (BACKLOG <= 0) BACKLOG = 10;
 
     // Iniciar loggers
-    init_logger("server_debug.log");
-    init_action_logger(LOG_PATH);
+    init_logger("server_debug.log", FOREGROUND);
+    init_action_logger(LOG_PATH, FOREGROUND);
 
     log_msg("Servidor iniciando en %s:%d (MAX_CLIENTES=%d, BACKLOG=%d, CSV=%s)",
             ip, puerto, MAX_CLIENTES, BACKLOG, CSV_PATH);
@@ -166,6 +171,7 @@ int main(int argc, char *argv[]) {
 void *manejador_cliente(void *arg) {
     int socket_cliente = *(int *)arg;
     free(arg);
+    int my_turn = 0;
 
     char buffer[BUFFER_SIZE];
     enviar(socket_cliente, "📡 Conectado al servidor de base de datos.\n");
@@ -189,94 +195,96 @@ void *manejador_cliente(void *arg) {
         sscanf(buffer, "%31s", cmd);
         for (int i = 0; cmd[i]; ++i) cmd[i] = toupper(cmd[i]);
 
-        // Verificar bloqueo por transacción activa
-        if (strcmp(cmd, "BEGIN") != 0 && strcmp(cmd, "SALIR") != 0) {
-            pthread_mutex_lock(&mutex_transaccion);
-            int activa = transaccion_activa;
-            pthread_t owner = trans_owner;
-            pthread_mutex_unlock(&mutex_transaccion);
-
-            if (activa && !pthread_equal(owner, self)) {
-                enviar(socket_cliente, "⚠️  Transacción activa por otro cliente. Reintente más tarde.\n");
-                continue;
-            }
-        }
-
-        // ===== Procesar comandos =====
-        if (strncmp(cmd, "MOSTRAR", 7) == 0) {
-            pthread_mutex_lock(&mutex_archivo);
-            mostrar_registros(socket_cliente);
-            pthread_mutex_unlock(&mutex_archivo);
-        }
-        else if (strncmp(cmd, "BUSCAR", 6) == 0) {
-            pthread_mutex_lock(&mutex_archivo);
-            buscar_registro(socket_cliente, buffer + 7);
-            pthread_mutex_unlock(&mutex_archivo);
-        }
-        else if (strncmp(cmd, "FILTRO", 6) == 0) {
-            pthread_mutex_lock(&mutex_archivo);
-            filtrar_generador(socket_cliente, buffer + 7);
-            pthread_mutex_unlock(&mutex_archivo);
-        }
-        else if (strncmp(cmd, "AGREGAR", 7) == 0) {
-            pthread_mutex_lock(&mutex_archivo);
-            agregar_registro(buffer + 8);
-            pthread_mutex_unlock(&mutex_archivo);
-            enviar(socket_cliente, "✅ Registro agregado correctamente.\n");
-        }
-        else if (strncmp(cmd, "MODIFICAR", 9) == 0) {
-            pthread_mutex_lock(&mutex_archivo);
-            modificar_registro(buffer + 10);
-            pthread_mutex_unlock(&mutex_archivo);
-            enviar(socket_cliente, "✅ Registro modificado correctamente.\n");
-        }
-        else if (strncmp(cmd, "ELIMINAR", 8) == 0) {
-            pthread_mutex_lock(&mutex_archivo);
-            eliminar_registro(buffer + 9);
-            pthread_mutex_unlock(&mutex_archivo);
-            enviar(socket_cliente, "✅ Registro eliminado correctamente.\n");
-        }
-        else if (strncmp(cmd, "BEGIN", 5) == 0) {
-            pthread_mutex_lock(&mutex_transaccion);
-            if (transaccion_activa) {
-                enviar(socket_cliente, "❌ Ya existe una transacción activa.\n");
-            } else {
-                transaccion_activa = 1;
-                trans_owner = self;
-                enviar(socket_cliente, "🚀 Transacción iniciada.\n");
-            }
-            pthread_mutex_unlock(&mutex_transaccion);
-        }
-        else if (strncmp(cmd, "COMMIT", 6) == 0) {
-            pthread_mutex_lock(&mutex_transaccion);
-            if (!transaccion_activa || !pthread_equal(trans_owner, self)) {
-                enviar(socket_cliente, "❌ No hay transacción activa o no es propietario.\n");
-            } else {
-                transaccion_activa = 0;
-                if (commit_temp() == 0)
-                    enviar(socket_cliente, "✅ Transacción confirmada (COMMIT).\n");
-                else
-                    enviar(socket_cliente, "⚠️  Error al confirmar transacción.\n");
-            }
-            pthread_mutex_unlock(&mutex_transaccion);
-        }
-        else if (strncmp(cmd, "ROLLBACK", 8) == 0) {
-            pthread_mutex_lock(&mutex_transaccion);
-            if (!transaccion_activa || !pthread_equal(trans_owner, self)) {
-                enviar(socket_cliente, "❌ No hay transacción activa o no es propietario.\n");
-            } else {
-                transaccion_activa = 0;
-                remove("temp.csv");
-                enviar(socket_cliente, "↩️  Transacción revertida (ROLLBACK).\n");
-            }
-            pthread_mutex_unlock(&mutex_transaccion);
-        }
-        else if (strncmp(cmd, "SALIR", 5) == 0) {
+        if (strncmp(cmd, "SALIR", 5) == 0) {
             enviar(socket_cliente, "👋 Desconectando...\n");
             break;
         }
-        else {
-            enviar(socket_cliente, "❓ Comando no reconocido.\n");
+
+        // Verificar bloqueo por transacción activa
+        if (strcmp(cmd, "BEGIN") == 0) {
+            pthread_mutex_lock(&mutex_transaccion);
+            if (transaccion_activa) {
+                enviar(socket_cliente, "❌ Ya existe una transacción activa.\n");
+                if(!pthread_equal(trans_owner, self)) {
+                    enviar(socket_cliente, "⚠️  Transacción activa por otro cliente. Reintente más tarde.\n");
+                }
+                pthread_mutex_unlock(&mutex_transaccion);
+                continue;
+            }else {
+                transaccion_activa = 1;
+                trans_owner = self;
+                my_turn = 1;
+                enviar(socket_cliente, "🚀 Transacción iniciada.\n");
+            }
+            pthread_mutex_unlock(&mutex_transaccion);
+            continue;
+        }
+
+        if (!transaccion_activa) {
+         enviar(socket_cliente, "Para comenzar una transacción, use el comando BEGIN.\n");
+         continue;
+        }else if (my_turn) {
+        
+            // ===== Procesar comandos =====
+            if (strncmp(cmd, "MOSTRAR", 7) == 0) {
+                pthread_mutex_lock(&mutex_archivo);
+                mostrar_registros(socket_cliente);
+                pthread_mutex_unlock(&mutex_archivo);
+            }
+            else if (strncmp(cmd, "BUSCAR", 6) == 0) {
+                pthread_mutex_lock(&mutex_archivo);
+                buscar_registro(socket_cliente, buffer + 7);
+                pthread_mutex_unlock(&mutex_archivo);
+            }
+            else if (strncmp(cmd, "FILTRO", 6) == 0) {
+                pthread_mutex_lock(&mutex_archivo);
+                filtrar_generador(socket_cliente, buffer + 7);
+                pthread_mutex_unlock(&mutex_archivo);
+            }
+            else if (strncmp(cmd, "AGREGAR", 7) == 0) {
+                pthread_mutex_lock(&mutex_archivo);
+                agregar_registro(buffer + 8);
+                pthread_mutex_unlock(&mutex_archivo);
+                enviar(socket_cliente, "✅ Registro agregado correctamente.\n");
+            }
+            else if (strncmp(cmd, "MODIFICAR", 9) == 0) {
+                pthread_mutex_lock(&mutex_archivo);
+                modificar_registro(buffer + 10);
+                pthread_mutex_unlock(&mutex_archivo);
+                enviar(socket_cliente, "✅ Registro modificado correctamente.\n");
+            }
+            else if (strncmp(cmd, "ELIMINAR", 8) == 0) {
+                pthread_mutex_lock(&mutex_archivo);
+                eliminar_registro(buffer + 9);
+                pthread_mutex_unlock(&mutex_archivo);
+                enviar(socket_cliente, "✅ Registro eliminado correctamente.\n");
+            }
+            else if (strncmp(cmd, "COMMIT", 6) == 0) {
+                pthread_mutex_lock(&mutex_transaccion);
+                if (!my_turn) {
+                    enviar(socket_cliente, "❌ No hay transacción activa o no es propietario.\n");
+                } else {
+                    transaccion_activa = 0;
+                    if (commit_temp() == 0)
+                        enviar(socket_cliente, "✅ Transacción confirmada (COMMIT).\n");
+                    else
+                        enviar(socket_cliente, "⚠️  Error al confirmar transacción.\n");
+                }
+                pthread_mutex_unlock(&mutex_transaccion);
+            }
+            else if (strncmp(cmd, "ROLLBACK", 8) == 0) {
+                pthread_mutex_lock(&mutex_transaccion);
+                if (!my_turn) {
+                    enviar(socket_cliente, "❌ No hay transacción activa o no es propietario.\n");
+                } else {
+                    rollback_transaccion();
+                    enviar(socket_cliente, "↩️  Transacción revertida (ROLLBACK).\n");
+                }
+                pthread_mutex_unlock(&mutex_transaccion);
+            }
+            else {
+                enviar(socket_cliente, "❓ Comando no reconocido.\n");
+            }
         }
     }
 

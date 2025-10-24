@@ -50,7 +50,13 @@ cliente: $(SRC_DIR)/cliente.c $(SRC_DIR)/utils.c
 run-server: servidor
 	@echo "🚀 Iniciando servidor en $(IP):$(PORT)"
 	@echo "👉 Ejecutando: $(BIN_DIR)/servidor $(IP) $(PORT) $(MAX) $(BACKLOG) $(CSV) $(LOG)"
-	@$(BIN_DIR)/servidor $(IP) $(PORT) $(MAX) $(BACKLOG) $(CSV) $(LOG) &
+	@$(BIN_DIR)/servidor $(IP) $(PORT) $(MAX) $(BACKLOG) $(CSV) $(LOG) 0 &
+	@echo "📝 Logs en $(LOG)"
+
+run-server-foreground: servidor
+	@echo "🚀 Iniciando servidor en primer plano en $(IP):$(PORT)"
+	@echo "👉 Ejecutando: $(BIN_DIR)/servidor $(IP) $(PORT) $(MAX) $(BACKLOG) $(CSV) $(LOG)"
+	@$(BIN_DIR)/servidor $(IP) $(PORT) $(MAX) $(BACKLOG) $(CSV) $(LOG) 1
 	@echo "📝 Logs en $(LOG)"
 
 
@@ -92,9 +98,7 @@ stop-server:
 # ===============================================================
 
 clean:
-	rm -rf $(BIN_DIR)/*.o \
-	       $(BIN_DIR)/servidor \
-	       $(BIN_DIR)/cliente \
+	rm -rf $(BIN_DIR) \
 	       $(LOG) \
 	       server_debug.log \
 	       test_*.log \
