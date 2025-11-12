@@ -93,11 +93,11 @@ void buscar_registro(int socket_cliente, const char *query) {
 }
 
 // Agrega un nuevo registro (línea completa ya formateada)
-void agregar_registro(const char *nuevo_registro) {
+int agregar_registro(const char *nuevo_registro) {
     FILE *archivo = abrir_base_datos("a+");
     if (!archivo) {
         perror("Error al abrir el archivo de base de datos");
-        return;
+        return -1;
     }
     // asegurar que el archivo termina en newline antes de añadir
     fseek(archivo, 0, SEEK_END);
@@ -110,11 +110,12 @@ void agregar_registro(const char *nuevo_registro) {
     }
     fprintf(archivo, "%s\n", nuevo_registro);
     fclose(archivo);
+    return 0;
 }
 
 // Modifica registro: cadena esperada: "<ID>;<nueva_linea_completa>"
-void modificar_registro(const char *arg) {
-    if (!arg) return;
+int modificar_registro(const char *arg) {
+    if (!arg) return -1;
     // formato: id;nuevo_registro
     char copia[1024];
     strncpy(copia, arg, sizeof(copia)-1);
@@ -123,13 +124,13 @@ void modificar_registro(const char *arg) {
     char *nuevo = strtok(NULL, "");
     if (!id_str || !nuevo) {
         printf("MODIFICAR: formato inválido. Uso: MODIFICAR <ID>;<nueva_linea_completa>\n");
-        return;
+        return -1;
     }
     int id = atoi(id_str);
-    FILE *archivo = abrir_base_datos("r+");
+    FILE *archivo = abrir_base_datos("r");
     if (!archivo) {
         perror("Error al abrir archivo de base de datos");
-        return;
+        return -1;
     }
     
     char linea[1024];
@@ -147,36 +148,51 @@ void modificar_registro(const char *arg) {
     }
     fclose(archivo);
     // reemplazo atómico
-    if (encontrado) printf("Registro %d modificado.\n", id);
-    else printf("Registro %d no encontrado para modificar.\n", id);
+    if (encontrado) {
+        printf("Registro %d modificado.\n", id);
+    } else {
+        printf("Registro %d no encontrado para modificar.\n", id);
+        return -1;
+    }
+    return 0;
 }
 
 // Elimina registro por ID (arg = "<ID>")
-void eliminar_registro(const char *arg) {
-    if (!arg) return;
+int eliminar_registro(const char *arg) {
+    if (!arg) return -1;
     int id = atoi(arg);
     FILE *archivo = abrir_base_datos("r+");
     if (!archivo) {
         perror("Error al abrir archivo de base de datos");
-        return;
+        return -1;
     }
     char linea[1024];
     int encontrado = 0;
+    fpos_t pos;
+    fgetpos(archivo, &pos);
     while (fgets(linea, sizeof(linea), archivo)) {
         char copia[1024];
         strncpy(copia, linea, sizeof(copia)-1);
         copia[sizeof(copia)-1] = '\0';
         char *tok = strtok(copia, ",");
         int id_arch = atoi(tok);
-        if (id_arch != id) {
-            fputs(linea, archivo);
-        } else {
+        if (id_arch == id) {
             encontrado = 1;
+            strncpy(linea, "debug", sizeof(linea)-1);
+            linea[sizeof(linea)-1] = '\0';
+            fsetpos(archivo, &pos);
+            fprintf(archivo, "%s", linea); // marcar línea para borrar
         }
+        fgetpos(archivo, &pos);
     }
     fclose(archivo);
-    if (encontrado) printf("Registro %d eliminado.\n", id);
-    else printf("Registro %d no encontrado para eliminar.\n", id);
+    if (encontrado) {
+        printf("Registro %d eliminado.\n", id);
+    } else {
+        printf("Registro %d no encontrado para eliminar.\n", id);
+        return -1;
+    }
+    return 0;
 }
 
 // Filtra registros por número de generador (ej. "1")

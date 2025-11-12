@@ -243,21 +243,30 @@ void *manejador_cliente(void *arg) {
             }
             else if (strncmp(cmd, "AGREGAR", 7) == 0) {
                 pthread_mutex_lock(&mutex_archivo);
-                agregar_registro(buffer + 8);
+                if (agregar_registro(buffer + 8) == 0) {
+                    enviar(socket_cliente, "✅ Registro agregado correctamente.\n");
+                } else {
+                    enviar(socket_cliente, "❌ Error al agregar registro.\n");
+                }
                 pthread_mutex_unlock(&mutex_archivo);
-                enviar(socket_cliente, "✅ Registro agregado correctamente.\n");
             }
             else if (strncmp(cmd, "MODIFICAR", 9) == 0) {
                 pthread_mutex_lock(&mutex_archivo);
-                modificar_registro(buffer + 10);
+                if (modificar_registro(buffer + 10) == 0) {
+                    enviar(socket_cliente, "✅ Registro modificado correctamente.\n");
+                } else {
+                    enviar(socket_cliente, "❌ Registro no encontrado para modificar.\n");
+                }
                 pthread_mutex_unlock(&mutex_archivo);
-                enviar(socket_cliente, "✅ Registro modificado correctamente.\n");
             }
             else if (strncmp(cmd, "ELIMINAR", 8) == 0) {
                 pthread_mutex_lock(&mutex_archivo);
-                eliminar_registro(buffer + 9);
+                if (eliminar_registro(buffer + 9) == 0) {
+                    enviar(socket_cliente, "✅ Registro eliminado correctamente.\n");
+                } else {
+                    enviar(socket_cliente, "❌ Registro no encontrado para eliminar.\n");
+                }
                 pthread_mutex_unlock(&mutex_archivo);
-                enviar(socket_cliente, "✅ Registro eliminado correctamente.\n");
             }
             else if (strncmp(cmd, "COMMIT", 6) == 0) {
                 pthread_mutex_lock(&mutex_transaccion);
@@ -304,7 +313,7 @@ void liberar_transaccion_si_propietario(pthread_t self) {
     pthread_mutex_lock(&mutex_transaccion);
     if (transaccion_activa && pthread_equal(trans_owner, self)) {
         transaccion_activa = 0;
-        remove("temp.csv");
+        rollback_transaccion();
         log_msg("⚠️  Transacción liberada automáticamente por desconexión del cliente propietario.");
     }
     pthread_mutex_unlock(&mutex_transaccion);
@@ -313,7 +322,7 @@ void liberar_transaccion_si_propietario(pthread_t self) {
 // ===== Cierre ordenado del servidor =====
 void cerrar_servidor(int signo) {
     log_action("🛑 Señal %d recibida. Cerrando servidor y liberando recursos...", signo);
-    remove("temp.csv");
+    rollback_transaccion();
     close_action_logger();
     close_logger();
     printf("\nServidor detenido correctamente.\n");

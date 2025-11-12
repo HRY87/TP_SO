@@ -8,9 +8,9 @@ void mostrar_registros(int socket_cliente);
 void buscar_registro(int socket_cliente, const char *query);
 void filtrar_generador(int socket_cliente, const char *generador);
 /* DML */
-void agregar_registro(const char *nuevo_registro);
-void modificar_registro(const char *arg); /* formato: "ID;nueva_linea_completa" */
-void eliminar_registro(const char *arg);
+int agregar_registro(const char *nuevo_registro);
+int modificar_registro(const char *arg); /* formato: "ID;nueva_linea_completa" */
+int eliminar_registro(const char *arg);
 int rollback_transaccion(void); /* Elimina temp.csv si existe */
 /* Commit de temp.csv sobre la BD (atómico si existe) */
 int commit_temp(void);

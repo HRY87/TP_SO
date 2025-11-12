@@ -12,9 +12,16 @@
 #include <termios.h>
 #include <errno.h>
 #include <pthread.h>
+#include <signal.h>
 
 #define BUFFER_SIZE 4096
 #define TIMEOUT_MS 300 // milisegundos sin datos = fin de respuesta
+
+void mostrar_menu();
+static void quitar_salto(char *s);
+static void limpiar_entrada();
+void check_connection(void *arg);
+void close_client(int signo);
 
 void mostrar_menu() {
     printf("Comandos disponibles:\n");
@@ -55,6 +62,14 @@ void check_connection(void *arg) {
             close(connection_fd);
             break;
         }
+    }
+    close_client(SIGCHLD);
+}
+
+void close_client(int signo) {
+    if (signo == SIGINT || signo == SIGCHLD) {
+        printf("Cerrando cliente...\n");
+        exit(0);
     }
 }
 
@@ -107,7 +122,8 @@ int main(int argc, char *argv[]) {
     mostrar_menu();
 
     char buffer[BUFFER_SIZE];
-
+    signal(SIGINT, close_client); // ignorar Ctrl+C para evitar cierre abrupto
+    signal(SIGCHLD, close_client);
 
     while (1) {
         printf("> ");
