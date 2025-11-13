@@ -166,6 +166,13 @@ int eliminar_registro(const char *arg) {
         perror("Error al abrir archivo de base de datos");
         return -1;
     }
+    FILE *temp = fopen("data/temp_elim.csv", "w");
+    if (!temp) {
+        perror("Error al abrir archivo temporal para eliminación");
+        fclose(archivo);
+        return -1;
+    }
+
     char linea[1024];
     int encontrado = 0;
     fpos_t pos;
@@ -178,18 +185,19 @@ int eliminar_registro(const char *arg) {
         int id_arch = atoi(tok);
         if (id_arch == id) {
             encontrado = 1;
-            strncpy(linea, "debug", sizeof(linea)-1);
-            linea[sizeof(linea)-1] = '\0';
-            fsetpos(archivo, &pos);
-            fprintf(archivo, "%s", linea); // marcar línea para borrar
+            continue;
         }
+        fputs(linea, temp);
         fgetpos(archivo, &pos);
     }
     fclose(archivo);
+    fclose(temp);
     if (encontrado) {
         printf("Registro %d eliminado.\n", id);
+        rename("data/temp_elim.csv", TEMP_DB);
     } else {
         printf("Registro %d no encontrado para eliminar.\n", id);
+        remove("data/temp_elim.csv");
         return -1;
     }
     return 0;
@@ -262,16 +270,18 @@ int rollback_transaccion() {
 int commit_temp() {
     // intenta eliminar original y renombrar temp
     if (access(TEMP_DB, F_OK) != 0) {
-        // no hay temp
-        return -1;
+            log_msg("No hay archivo temporal para COMMIT.");
+            return -1;
     }
-    if (remove(ARCHIVO_DB) != 0) {
-        // intentar continuar aun si falla remove
-        log_msg("warning: remove db failed: %d", errno);
-    }
-    if (rename(TEMP_DB, ARCHIVO_DB) != 0) {
-        log_msg("rename temp -> db falló");
-        return -1;
-    }
+        if (remove(ARCHIVO_DB) != 0) {
+            log_msg("Error al eliminar archivo original en COMMIT: %d", errno);
+            return -1;
+        }
+        if (rename(TEMP_DB, ARCHIVO_DB) != 0) {
+            log_msg("Error al renombrar archivo temporal en COMMIT: %d", errno);
+            return -1;
+        }
+        
     return 0;
 }
+    
