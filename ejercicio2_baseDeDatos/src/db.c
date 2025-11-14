@@ -262,6 +262,9 @@ int rollback_transaccion() {
             log_msg("Error al eliminar archivo temporal en ROLLBACK: %d", errno);
             return -1;
         }
+    } else {
+        log_msg("No hay archivo temporal para ROLLBACK.");
+        return -1;
     }
     return 0;
 }

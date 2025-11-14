@@ -220,7 +220,7 @@ void *manejador_cliente(void *arg) {
             continue;
         }
 
-        if (!transaccion_activa) {
+        if (!transaccion_activa || !my_turn) {
          enviar(socket_cliente, "Para comenzar una transacción, use el comando BEGIN.\n");
          continue;
         }else if (my_turn) {
@@ -274,6 +274,8 @@ void *manejador_cliente(void *arg) {
                     enviar(socket_cliente, "❌ No hay transacción activa o no es propietario.\n");
                 } else {
                     transaccion_activa = 0;
+                    my_turn = 0;
+                    trans_owner = 0;
                     if (commit_temp() == 0)
                         enviar(socket_cliente, "✅ Transacción confirmada (COMMIT).\n");
                     else
@@ -286,8 +288,10 @@ void *manejador_cliente(void *arg) {
                 if (!my_turn) {
                     enviar(socket_cliente, "❌ No hay transacción activa o no es propietario.\n");
                 } else {
-                    rollback_transaccion();
-                    enviar(socket_cliente, "↩️  Transacción revertida (ROLLBACK).\n");
+                    if(rollback_transaccion())
+                        enviar(socket_cliente, "⚠️  Error al revertir transacción.\n");
+                    else
+                        enviar(socket_cliente, "↩️  Transacción revertida (ROLLBACK).\n");
                 }
                 pthread_mutex_unlock(&mutex_transaccion);
             }
