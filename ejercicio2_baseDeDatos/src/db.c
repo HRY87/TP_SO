@@ -114,7 +114,7 @@ int agregar_registro(const char *nuevo_registro) {
 }
 
 // Modifica registro: cadena esperada: "<ID>;<nueva_linea_completa>"
-int modificar_registro(const char *arg) {
+int modificar_registro(int socket_cliente, const char *arg) {
     if (!arg) return -1;
     // formato: id;nuevo_registro
     char copia[1024];
