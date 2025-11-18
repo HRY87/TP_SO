@@ -123,13 +123,14 @@ int modificar_registro(const char *arg) {
     char *id_str = strtok(copia, ";");
     char *nuevo = strtok(NULL, "");
     if (!id_str || !nuevo) {
-        printf("MODIFICAR: formato inválido. Uso: MODIFICAR <ID>;<nueva_linea_completa>\n");
+        enviar(socket_cliente,"MODIFICAR: formato inválido. Uso: MODIFICAR <ID>;<nueva_linea_completa>\n");
         return -1;
     }
     int id = atoi(id_str);
     FILE *archivo = abrir_base_datos("r");
     if (!archivo) {
         perror("Error al abrir archivo de base de datos");
+        enviar(socket_cliente,"Error al abrir archivo de base de datos.\n");
         return -1;
     }
     
@@ -149,9 +150,9 @@ int modificar_registro(const char *arg) {
     fclose(archivo);
     // reemplazo atómico
     if (encontrado) {
-        printf("Registro %d modificado.\n", id);
+        log_msg("Registro %d modificado.\n", id);
     } else {
-        printf("Registro %d no encontrado para modificar.\n", id);
+        log_msg("Registro %d no encontrado para modificar.\n", id);
         return -1;
     }
     return 0;
@@ -163,12 +164,12 @@ int eliminar_registro(const char *arg) {
     int id = atoi(arg);
     FILE *archivo = abrir_base_datos("r+");
     if (!archivo) {
-        perror("Error al abrir archivo de base de datos");
+        log_msg("Error al abrir archivo de base de datos");
         return -1;
     }
     FILE *temp = fopen("data/temp_elim.csv", "w");
     if (!temp) {
-        perror("Error al abrir archivo temporal para eliminación");
+        log_msg("Error al abrir archivo temporal para eliminación");
         fclose(archivo);
         return -1;
     }
@@ -193,10 +194,10 @@ int eliminar_registro(const char *arg) {
     fclose(archivo);
     fclose(temp);
     if (encontrado) {
-        printf("Registro %d eliminado.\n", id);
+        log_msg("Registro %d eliminado.\n", id);
         rename("data/temp_elim.csv", TEMP_DB);
     } else {
-        printf("Registro %d no encontrado para eliminar.\n", id);
+        log_msg("Registro %d no encontrado para eliminar.\n", id);
         remove("data/temp_elim.csv");
         return -1;
     }

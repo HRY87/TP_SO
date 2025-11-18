@@ -46,19 +46,19 @@ int main(int argc, char *argv[]) {
     if (argc < 3) {
         fprintf(stderr,
             "Uso: %s <IP_O_HOST> <PUERTO> [MAX_CLIENTES] [BACKLOG] [CSV_PATH] [LOG_PATH]\n"
-            "Ejemplo: %s 127.0.0.1 8080 10 20 data/productos.csv server.log\n",
+            "Ejemplo: %s 8080 10 20 data/productos.csv server.log\n",
             argv[0], argv[0]);
         exit(EXIT_FAILURE);
     }
      // Ejecutar en primer plano
     
-    const char *ip = argv[1];
-    int puerto = atoi(argv[2]);
-    if (argc >= 4) MAX_CLIENTES = atoi(argv[3]);
-    if (argc >= 5) BACKLOG = atoi(argv[4]);
-    if (argc >= 6) strncpy(CSV_PATH, argv[5], sizeof(CSV_PATH) - 1);
-    if (argc >= 7) strncpy(LOG_PATH, argv[6], sizeof(LOG_PATH) - 1);
-    if (argc >= 8) FOREGROUND = atoi(argv[7]);
+    //const char *ip = argv[1];
+    int puerto = atoi(argv[1]);
+    if (argc >= 3) MAX_CLIENTES = atoi(argv[2]);
+    if (argc >= 4) BACKLOG = atoi(argv[3]);
+    if (argc >= 5) strncpy(CSV_PATH, argv[4], sizeof(CSV_PATH) - 1);
+    if (argc >= 6) strncpy(LOG_PATH, argv[5], sizeof(LOG_PATH) - 1);
+    if (argc >= 7) FOREGROUND = atoi(argv[6]);
     
     if (MAX_CLIENTES <= 0) MAX_CLIENTES = 5;
     if (BACKLOG <= 0) BACKLOG = 10;
@@ -67,8 +67,8 @@ int main(int argc, char *argv[]) {
     init_logger("server_debug.log", FOREGROUND);
     init_action_logger(LOG_PATH, FOREGROUND);
 
-    log_msg("Servidor iniciando en %s:%d (MAX_CLIENTES=%d, BACKLOG=%d, CSV=%s)",
-            ip, puerto, MAX_CLIENTES, BACKLOG, CSV_PATH);
+    log_msg("Servidor iniciando en puerto %d (MAX_CLIENTES=%d, BACKLOG=%d, CSV=%s)",
+            puerto, MAX_CLIENTES, BACKLOG, CSV_PATH);
 
     // Sincronizar ruta de DB con db.c
     strncpy(ARCHIVO_DB, CSV_PATH, sizeof(ARCHIVO_DB) - 1);
@@ -91,20 +91,12 @@ int main(int argc, char *argv[]) {
     memset(&direccion, 0, sizeof(direccion));
     direccion.sin_family = AF_INET;
     direccion.sin_port = htons(puerto);
-
-    if (strcmp(ip, "localhost") == 0) {
-        direccion.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    } else if (strcmp(ip, "0.0.0.0") == 0) {
-        direccion.sin_addr.s_addr = htonl(INADDR_ANY);
-    } else if (inet_pton(AF_INET, ip, &direccion.sin_addr) <= 0) {
-        fprintf(stderr, "❌ Dirección IP inválida: %s\n", ip);
-        exit(EXIT_FAILURE);
-    }
+    direccion.sin_addr.s_addr = htonl(INADDR_ANY);
 
     // ===== Bind =====
     if (bind(servidor_fd, (struct sockaddr *)&direccion, sizeof(direccion)) < 0) {
-        fprintf(stderr, "❌ Error en bind(%s:%d): %s\n", ip, puerto, strerror(errno));
-        log_msg("Error en bind(%s:%d): %s", ip, puerto, strerror(errno));
+        fprintf(stderr, "❌ Error en bind(%d): %s\n", puerto, strerror(errno));
+        log_msg("Error en bind(%d): %s", puerto, strerror(errno));
         close(servidor_fd);
         exit(EXIT_FAILURE);
     }
@@ -117,8 +109,8 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    printf("✅ Servidor iniciado en %s:%d\n", ip, puerto);
-    log_msg("Servidor iniciado en %s:%d", ip, puerto);
+    printf("✅ Servidor iniciado en puerto %d\n", puerto);
+    log_msg("Servidor iniciado en puerto %d", puerto);
 
     // Manejar señal Ctrl+C
     signal(SIGINT, cerrar_servidor);
