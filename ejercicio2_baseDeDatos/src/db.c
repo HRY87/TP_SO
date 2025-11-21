@@ -127,15 +127,23 @@ int modificar_registro(int socket_cliente, const char *arg) {
         return -1;
     }
     int id = atoi(id_str);
-    FILE *archivo = abrir_base_datos("r");
+    FILE *archivo = abrir_base_datos("r+");
     if (!archivo) {
         perror("Error al abrir archivo de base de datos");
         enviar(socket_cliente,"Error al abrir archivo de base de datos.\n");
         return -1;
     }
+
+     FILE *temp = fopen("data/temp_mod.csv", "w");
+    if (!temp) {
+        log_msg("Error al abrir archivo temporal para modificación");
+        fclose(archivo);
+        return -1;
+    }
     
     char linea[1024];
     int encontrado = 0;
+
     while (fgets(linea, sizeof(linea), archivo)) {
         char linea_c[1024];
         strncpy(linea_c, linea, sizeof(linea_c)-1);
@@ -143,15 +151,20 @@ int modificar_registro(int socket_cliente, const char *arg) {
         char *tok = strtok(linea_c, ",");
         int id_arch = atoi(tok);
         if (id_arch == id) {
-            fprintf(archivo, "%s\n", nuevo);
+            fputs(nuevo, temp);
             encontrado = 1;
+        }
+        else {
+            fputs(linea, temp);
         }
     }
     fclose(archivo);
-    // reemplazo atómico
+    fclose(temp);
     if (encontrado) {
+        rename("data/temp_mod.csv", TEMP_DB);
         log_msg("Registro %d modificado.\n", id);
     } else {
+        remove("data/temp_mod.csv");
         log_msg("Registro %d no encontrado para modificar.\n", id);
         return -1;
     }
@@ -176,8 +189,7 @@ int eliminar_registro(const char *arg) {
 
     char linea[1024];
     int encontrado = 0;
-    fpos_t pos;
-    fgetpos(archivo, &pos);
+    
     while (fgets(linea, sizeof(linea), archivo)) {
         char copia[1024];
         strncpy(copia, linea, sizeof(copia)-1);
@@ -189,7 +201,6 @@ int eliminar_registro(const char *arg) {
             continue;
         }
         fputs(linea, temp);
-        fgetpos(archivo, &pos);
     }
     fclose(archivo);
     fclose(temp);

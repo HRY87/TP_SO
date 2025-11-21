@@ -15,11 +15,12 @@ mkdir -p scripts/logs
 rm -f "$LOG" "$OUT" temp.csv server.pid
 
 chmod +x scripts/run_server.sh
-./scripts/run_server.sh 127.0.0.1 $PORT $MAX $BACKLOG $CSV $LOG
+./scripts/run_server.sh $PORT $MAX $BACKLOG $CSV $LOG
 sleep 1
 
 # Secuencia de comandos: consultas, DML, transacción, errores esperados
 cmds=(
+  "BEGIN"
   "MOSTRAR"
   "BUSCAR G1_001"
   "FILTRO 1"
@@ -51,3 +52,5 @@ cmds=(
 echo "---- Cliente output ----" > "$LOG"
 cat "$OUT" >> "$LOG"
 echo "Test ALL commands completado. Log: $LOG"
+
+exec ./scripts/stop_server.sh

@@ -13,10 +13,12 @@ LOG=test_many_actions.log
 mkdir -p scripts/logs
 rm -f "$LOG" scripts/logs/* temp.csv server.pid
 
-./scripts/run_server.sh 127.0.0.1 $PORT $MAX $BACKLOG $CSV $LOG
+./scripts/run_server.sh $PORT $MAX $BACKLOG $CSV $LOG
 sleep 1
 
 random_cmd() {
+  sleep $((RANDOM % 2))
+  echo "BEGIN"
   case $((RANDOM % 6)) in
     0) echo "MOSTRAR" ;;
     1) echo "BUSCAR G1_00$(( (RANDOM % 10) + 1 ))" ;;
@@ -25,6 +27,8 @@ random_cmd() {
     4) id=$((1 + RANDOM % 20)); echo "MODIFICAR $id;$id,G1_${id}_MOD,1,2025-10-16,12:00:00,1" ;;
     5) id=$((1 + RANDOM % 20)); echo "ELIMINAR $id" ;;
   esac
+  echo "COMMIT"
+  echo "SALIR"
 }
 
 # lanzamos N clientes que envían M comandos cada uno
@@ -58,4 +62,6 @@ for f in scripts/logs/cliente_many_*.out; do
   head -n 20 "$f" >> "$LOG"
 done
 
+
 echo "Test many clients finalizado. Log: $LOG"
+exec ./scripts/stop_server.sh 

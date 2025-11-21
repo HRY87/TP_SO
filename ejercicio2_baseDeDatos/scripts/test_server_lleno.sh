@@ -14,7 +14,7 @@ mkdir -p scripts/logs
 rm -f "$LOG" scripts/logs/* temp.csv server.pid
 
 # arrancar servidor (via run_server.sh para compilar si hace falta)
-./scripts/run_server.sh 127.0.0.1 $PORT $MAX $BACKLOG $CSV $LOG
+./scripts/run_server.sh $PORT $MAX $BACKLOG $CSV $LOG 
 
 sleep 1
 
@@ -31,7 +31,7 @@ cliente_try() {
     fi
     # leer saludo en background
     timeout 3 cat <&3 > "$out" & reader=$!
-    printf "MOSTRAR\n" >&3
+    printf "BEGIN\n" >&3
     sleep 1
     kill "$reader" 2>/dev/null || true
     exec 3>&-; exec 3<&-
@@ -41,7 +41,7 @@ cliente_try() {
 
 # lanzar más clientes que el límite
 PIDS=()
-TRIES=6
+TRIES=20
 for i in $(seq 1 $TRIES); do
   pid=$(cliente_try $i)
   PIDS+=($pid)
@@ -63,3 +63,4 @@ for f in scripts/logs/cliente_full_*.out; do
 done
 
 echo "Test completo. Log: $LOG"
+exec ./scripts/stop_server.sh

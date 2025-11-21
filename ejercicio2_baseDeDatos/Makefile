@@ -72,13 +72,10 @@ run: run-server
 # TESTS Y UTILIDADES
 # ===============================================================
 
-test: servidor cliente
-	chmod +x $(SCRIPTS)/test_concurrency.sh
-	$(SCRIPTS)/test_concurrency.sh
 
-test-full: servidor cliente
-	chmod +x $(SCRIPTS)/test_server_full.sh
-	$(SCRIPTS)/test_server_full.sh
+test-lleno: servidor cliente
+	chmod +x $(SCRIPTS)/test_server_lleno.sh
+	$(SCRIPTS)/test_server_lleno.sh
 
 test-many: servidor cliente
 	chmod +x $(SCRIPTS)/test_many_clients.sh
@@ -111,5 +108,5 @@ clean:
 
 .PHONY: all clean dirs servidor cliente \
         run run-server run-cliente \
-        test test-full test-many test-all \
+    	test-lleno test-many test-all \
         reparar restore-csv stop-server
