@@ -244,7 +244,7 @@ void *manejador_cliente(void *arg) {
             }
             else if (strncmp(cmd, "MODIFICAR", 9) == 0) {
                 pthread_mutex_lock(&mutex_archivo);
-                if (modificar_registro(buffer + 10) == 0) {
+                if (modificar_registro(socket_cliente, buffer + 10) == 0) {
                     enviar(socket_cliente, "✅ Registro modificado correctamente.\n");
                 } else {
                     enviar(socket_cliente, "❌ Registro no encontrado para modificar.\n");
